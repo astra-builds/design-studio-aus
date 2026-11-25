@@ -1,6 +1,4 @@
-import { db } from "@/db";
-import { bookings, enquiries } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { demoBookingAt, demoCreateBooking, demoDeleteEnquiry } from "@/lib/demo-store";
 import { estimate, type Kind, type Level, type Scope } from "@/lib/quote";
 import { isValidSlot } from "@/lib/slots";
 import { pickDirection } from "@/lib/studio";
@@ -63,8 +61,7 @@ export async function POST(req: Request) {
   let slotIso: string | undefined;
   if (b.slotIso) {
     if (!isValidSlot(b.slotIso)) return Response.json({ error: "That time is no longer available." }, { status: 409 });
-    const clash = await db.select().from(bookings).where(eq(bookings.slotStart, new Date(b.slotIso)));
-    if (clash.length) return Response.json({ error: "That time was just taken — please choose another." }, { status: 409 });
+    if (demoBookingAt(new Date(b.slotIso))) return Response.json({ error: "That time was just taken — please choose another." }, { status: 409 });
     slotIso = b.slotIso;
   }
 
@@ -90,13 +87,14 @@ export async function POST(req: Request) {
 
   if (slotIso) {
     try {
-      await db.insert(bookings).values({
+      demoCreateBooking({
         enquiryId: enquiry.id,
         slotStart: new Date(slotIso),
         kind: b.meetingKind ?? "studio",
+        status: "confirmed",
       });
     } catch {
-      await db.delete(enquiries).where(eq(enquiries.id, enquiry.id));
+      demoDeleteEnquiry(enquiry.id);
       return Response.json({ error: "That time was just taken — please choose another." }, { status: 409 });
     }
   }

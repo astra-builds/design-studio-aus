@@ -1,5 +1,4 @@
-import { db } from "@/db";
-import { conversations } from "@/db/schema";
+import { demoSaveConversation } from "@/lib/demo-store";
 import { respond, KB_SUMMARY, type Lead, type Msg } from "@/lib/concierge";
 import { queueMessages, upsertEnquiry } from "@/lib/leads";
 import { qualify } from "@/lib/qualify";
@@ -90,13 +89,7 @@ export async function POST(req: Request) {
       lead.saved = true;
     }
     if (body.sessionId) {
-      await db
-        .insert(conversations)
-        .values({ sessionId: body.sessionId, enquiryId: lead.id ?? null, transcript })
-        .onConflictDoUpdate({
-          target: conversations.sessionId,
-          set: { transcript, enquiryId: lead.id ?? null, updatedAt: new Date() },
-        });
+      demoSaveConversation({ sessionId: body.sessionId, enquiryId: lead.id ?? null, transcript });
     }
   } catch (err) {
     console.error("concierge persistence failed", err);

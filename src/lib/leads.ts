@@ -1,6 +1,5 @@
-import { db } from "@/db";
-import { enquiries, outbox, quotes } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { enquiries, outbox } from "@/db/schema";
+import { demoCreateEnquiry, demoCreateMessages, demoCreateQuote, demoUpdateEnquiry, demoUpdateMessage } from "@/lib/demo-store";
 import { qualify } from "@/lib/qualify";
 import { STUDIO } from "@/lib/studio";
 import { aud, type QuoteResult } from "@/lib/quote";
@@ -57,18 +56,16 @@ export async function upsertEnquiry(data: EnquiryData, existingId?: number) {
     reasons: q.reasons,
   };
   if (existingId) {
-    const [row] = await db.update(enquiries).set(values).where(eq(enquiries.id, existingId)).returning();
+    const row = demoUpdateEnquiry(existingId, values);
+    if (!row) throw new Error("Enquiry not found");
     return { enquiry: row, qualification: q, created: false };
   }
-  const [row] = await db
-    .insert(enquiries)
-    .values({ ...values, ref: newRef() })
-    .returning();
+  const row = demoCreateEnquiry({ ...values, ref: newRef(), status: "new" });
   return { enquiry: row, qualification: q, created: true };
 }
 
 export async function saveQuote(enquiryId: number, inputs: Record<string, unknown>, r: QuoteResult) {
-  await db.insert(quotes).values({
+  demoCreateQuote({
     enquiryId,
     inputs,
     lowFee: r.lowFee,
@@ -92,12 +89,9 @@ async function deliver(id: number, to: string, subject: string, text: string) {
         text,
       }),
     });
-    await db
-      .update(outbox)
-      .set({ status: res.ok ? "sent" : "failed" })
-      .where(eq(outbox.id, id));
+    demoUpdateMessage(id, res.ok ? "sent" : "failed");
   } catch {
-    await db.update(outbox).set({ status: "failed" }).where(eq(outbox.id, id));
+    demoUpdateMessage(id, "failed");
   }
 }
 
@@ -142,7 +136,14 @@ export async function queueMessages(opts: {
   );
   const clientBody = lines.join("\n");
 
-  const rows: (typeof outbox.$inferInsert)[] = [];
+  const rows: Array<{
+    enquiryId: number | null;
+    channel: string;
+    audience: string;
+    toAddr: string | null;
+    subject?: string | null;
+    body: string;
+  }> = [];
   if (e.email)
     rows.push({
       enquiryId: e.id,
@@ -181,7 +182,7 @@ export async function queueMessages(opts: {
       .join("\n"),
   });
 
-  const inserted = await db.insert(outbox).values(rows).returning();
+  const inserted = demoCreateMessages(rows);
   // fire-and-forget delivery if an email provider is configured
   for (const r of inserted) {
     if (r.channel === "email" && r.toAddr && r.subject) await deliver(r.id, r.toAddr, r.subject, r.body);

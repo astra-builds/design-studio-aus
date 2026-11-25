@@ -1,5 +1,4 @@
-import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { demoListBookings } from "@/lib/demo-store";
 import { generateDays } from "@/lib/slots";
 
 export const dynamic = "force-dynamic";
@@ -7,8 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   let taken = new Set<string>();
   try {
-    const rows = await db.select({ s: bookings.slotStart }).from(bookings);
-    taken = new Set(rows.map((r) => r.s.toISOString()));
+    taken = new Set(demoListBookings().map((r) => r.slotStart.toISOString()));
   } catch {
     // fall through with no taken slots
   }
